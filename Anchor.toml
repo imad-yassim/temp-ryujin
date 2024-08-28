@@ -11,7 +11,7 @@ ryujin_solana = "RYUqKUNAX3nFc2kPPBXLHzm326n5qsUveCJ3Z6Jj1fX"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "devnet"
 wallet = "/Users/cian/.config/solana/id.json"
 
 [scripts]
