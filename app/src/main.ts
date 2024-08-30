@@ -33,7 +33,7 @@ async function main() {
     // );
 
     console.log(`User balance : ${keypairBalance / 1e9}SOL`)
-    
+
     // Shuriken spin program
     console.log("Loading Shuriken spin program...")
 
@@ -61,22 +61,7 @@ async function main() {
     console.log("\nCreated randomness account..");
     console.log("Randomness account", randomness.pubkey.toString());
 
-    const createRandomnessTx = await sb.asV0Tx({
-      connection: sbProgram.provider.connection,
-      ixs: [ix],
-      payer: keypair.publicKey,
-      signers: [keypair, rngKp],
-      computeUnitPrice: 75_000,
-      computeUnitLimitMultiple: 1.3,
-    });
-
-    const sim = await connection.simulateTransaction(createRandomnessTx, txOpts);
-    const sig1 = await connection.sendTransaction(createRandomnessTx, txOpts);
-    await connection.confirmTransaction(sig1, COMMITMENT);
-    console.log(
-      "  Transaction Signature for randomness account creation: ",
-      sig1
-    );
+   
 
   // initialize example program accounts
   const playerStateAccount = await PublicKey.findProgramAddressSync(
@@ -91,8 +76,9 @@ async function main() {
 
   console.log("\nInitialize the game states...");
 
+  const commitIx = await randomness.commitIx(queue);
 
-  await initializeGame(
+  const ixx =await initializeGame(
     program,
     playerStateAccount,
     escrowAccount,
@@ -100,15 +86,32 @@ async function main() {
     sbProgram,
     connection
   );
-  await ensureEscrowFunded(
-    connection,
-    escrowAccount,
-    keypair,
-    sbProgram,
-    txOpts
+
+  const createRandomnessTx = await sb.asV0Tx({
+    connection: sbProgram.provider.connection,
+    ixs: [ix, ixx],
+    payer: keypair.publicKey,
+    signers: [keypair, rngKp],
+    computeUnitPrice: 75_000,
+    computeUnitLimitMultiple: 1.3,
+  });
+
+  const sim = await connection.simulateTransaction(createRandomnessTx, txOpts);
+  const sig1 = await connection.sendTransaction(createRandomnessTx, txOpts);
+  await connection.confirmTransaction(sig1, COMMITMENT);
+  console.log(
+    "  Transaction Signature for randomness account creation: ",
+    sig1
   );
 
-  const commitIx = await randomness.commitIx(queue);
+  // await ensureEscrowFunded(
+  //   connection,
+  //   escrowAccount,
+  //   keypair,
+  //   sbProgram,
+  //   txOpts
+  // );
+
 
  // Create Wheel spin Ix
   const coinFlipIx = await createWheelSpinInstruction(
@@ -121,7 +124,7 @@ async function main() {
 
   const commitTx = await sb.asV0Tx({
     connection: sbProgram.provider.connection,
-    ixs: [commitIx, coinFlipIx],
+    ixs: [ commitIx, coinFlipIx],
     payer: keypair.publicKey,
     signers: [keypair],
     computeUnitPrice: 75_000,
@@ -148,7 +151,7 @@ async function main() {
  
    const revealTx = await sb.asV0Tx({
      connection: sbProgram.provider.connection,
-     ixs: [revealIx, settleFlipIx],
+     ixs: [ revealIx, settleFlipIx],
      payer: keypair.publicKey,
      signers: [keypair],
      computeUnitPrice: 75_000,

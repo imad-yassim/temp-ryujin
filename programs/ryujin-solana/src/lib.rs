@@ -20,18 +20,20 @@ const GAME_PRICE: u64 = (1 / 10) * LAMPORTS_PER_SOL;
 pub mod ryujin_solana {
   use super::*;
 
-  // pub fn initialize_game(ctx: Context<InitializeGame>) -> Result<()> {
-  //   let player_state = &mut ctx.accounts.player_state;
-  //   player_state.randomness_account = Pubkey::default(); // Placeholder, will be set in coin_flip
-  //   player_state.bump = ctx.bumps.player_state;
-  //   player_state.allowed_user = ctx.accounts.user.key();
+  pub fn initialize_game(ctx: Context<InitializeGame>) -> Result<()> {
+    let player_state = &mut ctx.accounts.player_state;
+    player_state.latest_flip_result = 366;
+    player_state.randomness_account = Pubkey::default(); // Placeholder, will be set in coin_flip
+    player_state.bump = ctx.bumps.player_state;
+    player_state.allowed_user = ctx.accounts.user.key();
 
-  //   Ok(())
-  // }
+    Ok(())
+  }
 
   pub fn wheel_spin(ctx: Context<WheelSpin>, randomness_account: Pubkey) -> Result<()> {
     let clock = Clock::get()?;
-    // let player_state: &mut Account<PlayerState> = &mut ctx.accounts.player_state;
+    let player_state = &mut ctx.accounts.player_state;
+
     // Record the user's guess
     let randomness_data = RandomnessAccountData::parse(ctx.accounts.randomness_account_data.data.borrow()).unwrap();
 
@@ -43,7 +45,7 @@ pub mod ryujin_solana {
 
     // Track the player's committed values so you know they don't request randomness
     // multiple times.
-    // player_state.commit_slot = randomness_data.seed_slot;
+    player_state.commit_slot = randomness_data.seed_slot;
 
     // ***
     // IMPORTANT: Remember, in Switchboard Randomness, it's the responsibility of the caller to reveal the randomness.
@@ -58,7 +60,7 @@ pub mod ryujin_solana {
     )?;
 
     // Store flip commit
-    // player_state.randomness_account = randomness_account;
+    player_state.randomness_account = randomness_account;
 
     // Log the result
     msg!("Wheel spinning initiated, randomness requested.");

@@ -83,7 +83,7 @@ export async function initializeGame(
   keypair: Keypair,
   sbProgram: Program,
   connection: Connection
-): Promise<void> {
+): Promise<web3.TransactionInstruction> {
   const initIx = await myProgram.methods
     .initializeGame()
     .accounts({
@@ -99,14 +99,16 @@ export async function initializeGame(
     skipPreflight: true,
     maxRetries: 0,
   };
-  await handleTransaction(
-    sbProgram,
-    connection,
-    [initIx],
-    keypair,
-    [keypair],
-    txOpts
-  );
+
+  return initIx;
+  // await handleTransaction(
+  //   sbProgram,
+  //   connection,
+  //   [initIx],
+  //   keypair,
+  //   [keypair],
+  //   txOpts
+  // );
 }
 
 
@@ -116,17 +118,19 @@ export async function ensureEscrowFunded(
   keypair: Keypair,
   sbProgram: Program,
   txOpts: any
-): Promise<void> {
+): Promise<w> {
   const accountBalance = await connection.getBalance(escrowAccount);
   const minRentExemption =
     await connection.getMinimumBalanceForRentExemption(0);
 
   const requiredBalance = minRentExemption;
-  if (accountBalance < requiredBalance) {
-    const amountToFund = requiredBalance - accountBalance;
-    console.log(
-      `Funding account with ${amountToFund} lamports to meet rent exemption threshold.`
-    );
+  const amountToFund = requiredBalance - accountBalance;
+
+  // if (accountBalance < requiredBalance) {
+  //   const amountToFund = requiredBalance - accountBalance;
+  //   console.log(
+  //     `Funding account with ${amountToFund} lamports to meet rent exemption threshold.`
+  //   );
 
     const transferIx = SystemProgram.transfer({
       fromPubkey: keypair.publicKey,
@@ -134,22 +138,23 @@ export async function ensureEscrowFunded(
       lamports: amountToFund,
     });
 
-    const transferTx = await sb.asV0Tx({
-      connection: sbProgram.provider.connection,
-      ixs: [transferIx],
-      payer: keypair.publicKey,
-      signers: [keypair],
-      computeUnitPrice: 75_000,
-      computeUnitLimitMultiple: 1.3,
-    });
+    return transferIx;
+    // const transferTx = await sb.asV0Tx({
+    //   connection: sbProgram.provider.connection,
+    //   ixs: [transferIx],
+    //   payer: keypair.publicKey,
+    //   signers: [keypair],
+    //   computeUnitPrice: 75_000,
+    //   computeUnitLimitMultiple: 1.3,
+    // });
 
-    const sim3 = await connection.simulateTransaction(transferTx, txOpts);
-    const sig3 = await connection.sendTransaction(transferTx, txOpts);
-    await connection.confirmTransaction(sig3, COMMITMENT);
-    console.log("  Transaction Signature ", sig3);
-  } else {
-    console.log("  Escrow account funded already");
-  }
+  //   const sim3 = await connection.simulateTransaction(transferTx, txOpts);
+  //   const sig3 = await connection.sendTransaction(transferTx, txOpts);
+  //   await connection.confirmTransaction(sig3, COMMITMENT);
+  //   console.log("  Transaction Signature ", sig3);
+  // } else {
+  //   console.log("  Escrow account funded already");
+  // }
 }
 
 export /**
