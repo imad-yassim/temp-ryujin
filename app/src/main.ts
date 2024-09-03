@@ -37,8 +37,11 @@ async function main() {
     // Shuriken spin program
     console.log("Loading Shuriken spin program...")
 
-    const programId = new PublicKey(process.env.PROGRAM_ID as string);
-    if (!programId) throw Error("Program ID not found!")
+    // const programId = new PublicKey(process.env.PROGRAM_ID as string);
+
+    // console.log({ programId })
+
+    // if (!programId) throw Error("Program ID not found!")
     const idl: Idl = JSON.parse(readFileSync("./target/idl/ryujin_solana.json", "utf-8"));
     const program = new Program(idl, provider);
 
