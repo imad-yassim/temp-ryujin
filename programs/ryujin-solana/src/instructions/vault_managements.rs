@@ -1,6 +1,7 @@
 use crate::errors::ErrorCode;
 
 use anchor_lang::prelude::*;
+use anchor_spl::{associated_token::{self, AssociatedToken}, token::{self, Mint, Token, TokenAccount, Transfer}};
 
 
 pub fn transfer<'a>(
@@ -31,3 +32,46 @@ pub fn transfer<'a>(
 
 
 
+pub fn transfer_spl_tokens<'a>(
+  to: AccountInfo<'a>,
+  to_ata: Account<'a, TokenAccount>,
+  mint: Account<'a, Mint>,
+  vault_authority: AccountInfo<'a>,
+  vault_ata: Account<'a, TokenAccount>,
+  token_program: Program<'a, Token>,
+  associated_token_program: Program<'a, AssociatedToken>,
+  system_program: Program<'a, System>,
+  amount: u64
+  ) -> Result<()> {
+
+
+  // CHECK IF RECIPIENT HAVE AN ASSOCIATED TOKEN ACCOUNT
+  if to_ata.amount == 0 && to_ata.owner == Pubkey::default() {
+    // IF NO CREATE ONE FOR HIM
+    let cpi_accounts = associated_token::Create  {
+      payer: to.to_account_info(),
+      associated_token: to_ata.to_account_info(),
+      authority: to.to_account_info(),
+      mint: mint.to_account_info(),
+      system_program: system_program.to_account_info(),
+      token_program: token_program.to_account_info(),
+    };
+
+    let cpi_program = associated_token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    associated_token::create(cpi_ctx)?;
+  }
+
+
+  // SEND TOKEN TO USER ASSOCIATED TOKEN ACCOUNT
+  let transfer_ctx = CpiContext::new(
+    token_program.to_account_info(),
+    Transfer {
+        from: vault_ata.to_account_info(),
+        to: to_ata.to_account_info(),
+        authority: vault_authority.to_account_info(),
+    },
+  );
+  token::transfer(transfer_ctx, amount)
+
+}

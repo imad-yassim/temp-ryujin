@@ -1,8 +1,6 @@
 
 pub mod errors;
 pub mod instructions;
-pub mod states;
-pub mod events;
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::native_token::LAMPORTS_PER_SOL;
@@ -10,6 +8,7 @@ use anchor_lang::solana_program::native_token::LAMPORTS_PER_SOL;
 use instructions::vault_managements::*;
 use instructions::start_game::*;
 use instructions::reveal_result::*;
+use instructions::initialize_pda::*;
 
 use anchor_lang::{
   solana_program::account_info::AccountInfo,
@@ -19,26 +18,35 @@ use anchor_lang::{
 declare_id!("RYUqKUNAX3nFc2kPPBXLHzm326n5qsUveCJ3Z6Jj1fX");
 
 const GAME_PRICE: u64 = (1 / 10) * LAMPORTS_PER_SOL;
+// const _WL_TOKEN: &str = "8KrDpQqz7hvTgk3BP4tmLN2thtAErmdcd5Z7sk4wAQAd";
+// const _OG_TOKEN: &str = "2fyaGAUav6v8uU2bbiWsYArgeaUoD3DzRcaYndC1AgVG";
 
 #[program]
 pub mod ryujin_solana {
 
-  use super::*;
 
-  // pub fn initialize_game(ctx: Context<InitializeGame>) -> Result<()> {
-  //   let player_state = &mut ctx.accounts.player_state;
-  //   player_state.latest_flip_result = 366;
-  //   player_state.randomness_account = Pubkey::default(); // Placeholder, will be set in coin_flip
-  //   player_state.bump = ctx.bumps.player_state;
-  //   player_state.allowed_user = ctx.accounts.user.key();
 
-  //   Ok(())
-  // }
+use instructions::reward_distribution::distribute_reward;
 
-    pub fn start_game(ctx: Context<StartSpinning>, force: [u8; 32]) -> Result<()> {
-    // ***
+use super::*;
+
+  pub fn initialize_game(ctx: Context<InitializePDAInstruction>) -> Result<()> {
+    initialize(ctx)
+  }
+
+  pub fn start_game(ctx: Context<StartSpinning>, force: [u8; 32]) -> Result<()> {
+    //  Player Status Verification.
+    let player_state: &mut Account<'_, PlayerState> = &mut ctx.accounts.player_state;
+
+    if player_state.allowed_user != ctx.accounts.user.key() {
+      return Err(CantStartNewGame::UserNotAllowed.into());
+    }
+    if  player_state.current_force != [0; 32] {
+      return Err(CantStartNewGame::SpinWaitingForReveal.into());
+    }
+
+
     //  Taking the game collateral before requesting randomness.
-    // ***
     msg!("Taking the game collateral before requesting randomness...");
     transfer(
       ctx.accounts.system_program.to_account_info(),
@@ -48,15 +56,45 @@ pub mod ryujin_solana {
       None,
     )?;
     msg!("Payment retrieved successfully.");
-
-    // ***
-    //  Requesting orao randomness.
-    // ***
+    // Requesting orao randomness.
     request_randomness(ctx, force)
   }
 
   pub fn stop_spinning(ctx: Context<StopSpinningInstruction>, _force: [u8; 32]) -> Result<()> {
-    reveal_randomness(ctx)
+    //  Player Status Verification.
+    let player_state: &mut Account<'_, PlayerState> = &mut ctx.accounts.player_state;
+    let wl_vault_account = &ctx.accounts.wl_vault_account;
+    let og_vault_account = &ctx.accounts.og_vault_account;
+
+    if player_state.allowed_user != ctx.accounts.user.key() {
+      return Err(CantStartNewGame::UserNotAllowed.into());
+    }
+    if player_state.current_force == [0; 32]{
+      return Err(CantRevealGameResult::EmptyForce.into());
+    }
+
+    // Ensure that the program-derived PDA is the authority
+    let (expected_wl_vault_authority, _wl_vault_bump) = Pubkey::find_program_address(&[b"WLVaultAccount"], ctx.program_id);
+    let (expected_og_vault_authority, _og_vault_bump) = Pubkey::find_program_address(&[b"OGVaultAccount"], ctx.program_id);
+
+    if wl_vault_account.key() != expected_wl_vault_authority {
+        return Err(ProgramError::IncorrectProgramId.into());
+    }
+
+    if og_vault_account.key() != expected_og_vault_authority {
+      return Err(ProgramError::IncorrectProgramId.into());
+    }
+
+    let player_state: &mut Account<'_, PlayerState> = &mut ctx.accounts.player_state;
+    let randomness_account_data: &AccountInfo = &mut ctx.accounts.randomness_account_data;
+
+    // Reveal result and distribute rewards.
+    let result = reveal_randomness(randomness_account_data, player_state)?;
+
+    distribute_reward(ctx, result)
+
+    // Ok(())
+
   }
 
 
@@ -120,16 +158,23 @@ pub mod ryujin_solana {
 
 
 
-// === Accounts ===
-#[account]
-pub struct PlayerState {
-    allowed_user: Pubkey,
-    latest_flip_result: u16, // Stores the result of the latest flip
-    randomness_account: Pubkey, // Reference to the Switchboard randomness account
-    bump: u8,
-    commit_slot: u64, // The slot at which the randomness was committed
-    force: [u8; 32]
-  }
+// === Errors ===
+#[error_code]
+pub enum CantStartNewGame {
+    #[msg("Can't start a new game until you reveal previous spin.")]
+    SpinWaitingForReveal,
+    #[msg("Can't start a new game. User not allowed")]
+    UserNotAllowed
+}
+
+#[error_code]
+pub enum CantRevealGameResult {
+    #[msg("Can't reveal game. Force is empty.")]
+    EmptyForce,
+    #[msg("Can't start a new game. User not allowed")]
+    UserNotAllowed
+}
+
 
 #[error_code]
 pub enum StillProcessing {

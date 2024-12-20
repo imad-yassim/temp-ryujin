@@ -1,11 +1,11 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Idl, Program } from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
 import { RyujinSolana } from "../target/types/ryujin_solana";
 
-import * as fs from "fs"
-import { ensureEscrowFunded, loadSbProgram, setupQueue } from "../app/src/utils";
-import * as sb from '@switchboard-xyz/on-demand';
-import { Commitment, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { networkStateAccountAddress } from "@orao-network/solana-vrf";
+import { Commitment, Keypair, PublicKey } from "@solana/web3.js";
+import * as fs from "fs";
+import { ensureEscrowFunded, loadSbProgram } from "../app/src/utils";
 const PLAYER_STATE_SEED = "playerState";
 const ESCROW_SEED = "stateEscrow";
 const COMMITMENT = "confirmed";
@@ -23,7 +23,7 @@ describe("ryujin-solana", () => {
 
 
 
-    const userSecretKey = JSON.parse(fs.readFileSync("./tests/RYTvFtn7thFaBshE472JD7oETcKTS14RTbXg56qZzzQ.json", 'utf8'));
+    const userSecretKey = JSON.parse(fs.readFileSync("./wallet.json", 'utf8'));
     const user = anchor.web3.Keypair.fromSecretKey(new Uint8Array(userSecretKey))
 
     const playerStateAccount = await PublicKey.findProgramAddressSync(
@@ -31,32 +31,46 @@ describe("ryujin-solana", () => {
       program.programId
     );
 
-
     console.log({userSecretKey})
 
-    const sbProgram = await loadSbProgram(program!.provider);
-    const txOpts = {
-      commitment: "processed" as Commitment,
-      skipPreflight: false,
-      maxRetries: 0,
-    };
-
- 
     // Find the escrow account PDA and initliaze the game
   const [escrowAccount, escrowBump] = await PublicKey.findProgramAddressSync(
     [Buffer.from(ESCROW_SEED)],
     program.programId
   );
 
+  const force = Keypair.generate().publicKey;
+
   const tx = await program.methods
-    .startGame()
-    .accounts({
+  .startGame([ ...force.toBuffer() ])
+  .accounts({
       user: user.publicKey,
-      vaultAccount: 
-      systemProgram: SystemProgram.programId,
+      config: networkStateAccountAddress()
     })
     .signers([ user ])
     .rpc();
+
+    const transaction = await program.provider.connection.getParsedTransaction(tx, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0, // For backward compatibility with older transaction formats
+  });
+
+  // Check if the transaction was found
+  if (!transaction) {
+      console.log('Transaction not found.');
+      return;
+  }
+
+  // Access and display the logs
+  const logs = transaction.meta?.logMessages;
+  if (logs) {
+      console.log('Transaction Logs:');
+      logs.forEach((log, index) => {
+          console.log(`${index + 1}: ${log}`);
+      });
+  } else {
+      console.log('No logs found in this transaction.');
+  }
 
   // await program.methods.wheelSpin().accounts({
   //   playerState:  playerStateAccount,
@@ -70,8 +84,8 @@ describe("ryujin-solana", () => {
   //   txOpts
   // );
 
-  const balance = await sbProgram.provider.connection.getBalance(escrowAccount)
-  console.log(`Vault ${ensureEscrowFunded} balance : ${balance}`)
+  // const balance = await sbProgram.provider.connection.getBalance(escrowAccount)
+  // console.log(`Vault ${ensureEscrowFunded} balance : ${balance}`)
 
 
       console.log("Your transaction signature", tx);
